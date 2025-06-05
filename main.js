@@ -27,3 +27,11 @@ app.get("/payment/ok", (req, res) => {
 app.listen(3888, () => {
   console.log("server is on!")
 })
+
+function orderGenerator() {
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10).replace(/-/g, "")
+  const random = Math.random().toString(36).substring(2, 10).toUpperCase()
+
+  return `OD-${date}-${random}`
+}

@@ -1,16 +1,6 @@
 import express from "express"
-import crypto from "crypto"
-import "dotenv/config"
-
-const host = "https://sandbox-api-pay.line.me/v3"
-
-function signKey(clientKey, msg) {
-  const encoder = new TextEncoder()
-  return crypto
-    .createHmac("sha256", encoder.encode(clientKey))
-    .update(encoder.encode(msg))
-    .digest("base64")
-}
+import { orderGenerator } from "./lib/order.js"
+import { requestOnlineAPI } from "./lib/linepay.js"
 
 const app = express()
 app.set("views", "./templates")
@@ -25,11 +15,8 @@ app.get("/cart/order", (req, res) => {
   res.render("cart/order")
 })
 
-app.post("/payment/linepay", (req, res) => {
+app.post("/payment/linepay", async (req, res) => {
   // 跳轉 linepay 頁面
-  const { LINEPAY_CHANNEL_ID, LINEPAY_CHANNEL_SECRET_KEY } = process.env
-  const apiPath = "/payments/request"
-  const nonce = crypto.randomUUID()
   const data = {
     amount: 100,
     currency: "TWD",
@@ -41,8 +28,9 @@ app.post("/payment/linepay", (req, res) => {
         products: [
           {
             id: "PEN-B-001",
-            name: "Pen Brown",
-            imageUrl: "https://pay-store.example.com/images/pen_brown.jpg",
+            name: "威猛布丁狗",
+            imageUrl:
+              "https://unsplash.com/photos/gKXKBY-C-Dk/download?ixid=M3wxMjA3fDB8MXxhbGx8fHx8fHx8fHwxNzQ5MTkxMTYwfA&force=true&w=640",
             quantity: 2,
             price: 50,
           },
@@ -54,35 +42,37 @@ app.post("/payment/linepay", (req, res) => {
       cancelUrl: "http://localhost:3888/order/cancel",
     },
   }
-  const msg = `${LINEPAY_CHANNEL_SECRET_KEY}${apiPath}${JSON.stringify(
-    data
-  )}${nonce}`
 
-  const sig = signKey(LINEPAY_CHANNEL_SECRET_KEY, msg)
-  const headers = {
-    "Content-Type": "application/json",
-    "X-LINE-ChannelId": LINEPAY_CHANNEL_ID,
-    "X-LINE-Authorization": sig,
-    "X-LINE-Authorization-Nonce": nonce,
+  const response = await requestOnlineAPI({
+    method: "POST",
+    apiPath: "/v3/payments/request",
+    data: data,
+  })
+
+  if (response.returnCode == "0000") {
+    const paymentURL = response.info.paymentUrl.web
+    res.redirect(paymentURL)
+  } else {
+    res.redirect("/payment/fail")
   }
-
-  console.log(headers)
-
-  res.redirect("/payment/ok")
 })
 
 app.get("/payment/ok", (req, res) => {
   res.render("payment/ok")
 })
 
+app.get("/payment/fail", (req, res) => {
+  res.render("payment/fail")
+})
+
+app.get("/order/confirm", (req, res) => {
+  // 存 transactionId & orderId
+  const { transactionId, orderId } = req.query
+  console.log("存", transactionId, orderId)
+
+  res.redirect("/payment/ok")
+})
+
 app.listen(3888, () => {
   console.log("server is on!")
 })
-
-function orderGenerator() {
-  const now = new Date()
-  const date = now.toISOString().slice(0, 10).replace(/-/g, "")
-  const random = Math.random().toString(36).substring(2, 10).toUpperCase()
-
-  return `OD-${date}-${random}`
-}
